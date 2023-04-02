@@ -1,0 +1,17 @@
+version: '3.7'
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: blockchain-nginx
+    restart: unless-stopped
+    ports:
+      - 8000:80
+    volumes:
+      - ./public:/var/www/public
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d/
+    networks:
+      - blockchain
+
+networks:
+  blockchain:
+    driver: bridge
