@@ -1,9 +1,5 @@
 const web3 = new Web3(window.ethereum);
 
-// const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-// account = accounts[0];
-
-
 function init() {
     return {
         account: null,
@@ -12,13 +8,38 @@ function init() {
         computerScore: 0,
         choice: null,
         contract: null,
-        stake: 0,
+        stake: 100000,
         resultMessage: 'Start the game.',
         resultClass: 'bg-white text-gray-700',
+        lock: false,
+        minStake: 100000,
         async init() {
-            this.initAccount();            
-            var self = this;
-
+            this.initAccount();
+            this.initContract();
+            this.setUpEventListeners();
+        },
+        async changeNetwork() {
+            const sepoliaChainId = 11155111;
+            await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: web3.utils.toHex(sepoliaChainId) }]
+            });
+        },
+        async connect() {
+            if(window.ethereum) {
+                await ethereum.enable();
+                this.initAccount();
+                this.changeNetwork();
+            }
+        },
+        initAccount() {
+            web3.eth.getAccounts((error,accounts) => {
+                this.account = accounts[0];
+                this.updateBalance();
+                this.changeNetwork();
+            });
+        },
+        initContract() {
             this.contract = new web3.eth.Contract([
                 {
                     "anonymous": false,
@@ -32,6 +53,19 @@ function init() {
                     ],
                     "name": "FinishedEvent",
                     "type": "event"
+                },
+                {
+                    "inputs": [],
+                    "name": "MIN_BET",
+                    "outputs": [
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
                 },
                 {
                     "inputs": [],
@@ -59,35 +93,27 @@ function init() {
                     "stateMutability": "payable",
                     "type": "function"
                 }
-            ], "0x70a5520B02F8ca9eB4de3F54e190d0EA3963843D");
+            ], "0x1ae87e36c33901B19a91e3a47dc25440B94378e2");
+        },
+        setUpEventListeners() {
+            var self = this;
 
             this.contract.events.FinishedEvent(() => {})
-                .on("data", function(event) {
-                    if(parseInt(event.returnValues.result) === 0) {
-                        self.playerScore++;
-                        self.resultMessage = "You won!";
-                        self.resultClass = "bg-green-600 text-white";
-                    } else if(parseInt(event.returnValues.result) === 1) {
-                        self.computerScore++;
-                        self.resultMessage = "You lost!";
-                        self.resultClass = "bg-red-600 text-white";
-                    } else if(parseInt(event.returnValues.result) === 2) {
-                        self.resultMessage = "It's a draw!";
-                        self.resultClass = "bg-gray-600 text-white";
-                    }
-                    self.updateBalance();
-                });
-        },
-        async connect() {
-            if(window.ethereum) {
-                await ethereum.enable();
-                this.initAccount();
-            }
-        },
-        initAccount() {
-            web3.eth.getAccounts((error,accounts) => {
-                this.account = accounts[0];
-                this.updateBalance();                
+            .on("data", function(event) {
+                if(parseInt(event.returnValues.result) === 0) {
+                    self.playerScore++;
+                    self.resultMessage = "You won!";
+                    self.resultClass = "bg-green-600 text-white";
+                } else if(parseInt(event.returnValues.result) === 1) {
+                    self.computerScore++;
+                    self.resultMessage = "You lost!";
+                    self.resultClass = "bg-red-600 text-white";
+                } else if(parseInt(event.returnValues.result) === 2) {
+                    self.resultMessage = "It's a draw!";
+                    self.resultClass = "bg-gray-600 text-white";
+                }
+                self.updateBalance();
+                self.lock = false;
             });
         },
         updateBalance() {
@@ -97,9 +123,12 @@ function init() {
             });
         },
         play(choice) {
-            console.log(web3.utils.toWei(this.stake.toString(), 'gwei'));
+            this.lock = true;
             const receipt = this.contract.methods.play(choice)
-                .send({from: this.account, value: web3.utils.toWei(this.stake.toString(), 'gwei')});
-        }
+                .send({from: this.account, value: web3.utils.toWei(this.stake.toString(), 'gwei')})
+                .catch((error) => {
+                    this.lock = false;
+                });
+        },
     };
 }
